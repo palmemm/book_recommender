@@ -1,16 +1,14 @@
 import pandas as pd
-from api_request import full_data
+from api_request import get_one_book
 
 user_ratings = {}
 book_titles = {}
 
-for book in full_data['data']['books']:
+for book in get_one_book():
     avg_rating = book['rating']
     book_id = book['id']
     book_title = book['title']
     book_titles[book_id] = book_title
-    if book_id == 4513:
-        print(book_title)
     user_ratings['Average'] = {book_id:avg_rating}
     for user in book['user_books']:
         user_id = user['user_id']

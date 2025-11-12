@@ -19,9 +19,11 @@ def fetch_books_from_api():
   max_retries = 5
   total_books = 0
 
+  if os.path.exists(cache_file):
+    print(f"Cache file already exists with data. Delete it first to re-fetch.")
+    return total_books
+
   with open(cache_file, 'w') as f:
-    f.write('[')  # Start JSON array
-    first_item = True
 
     while has_more_data:
       query = """
@@ -38,52 +40,82 @@ def fetch_books_from_api():
         }
         """ % (limit, offset)
 
-      response = requests.post(url, json={'query': query}, headers=headers)
-      data = response.json()
+      try:
+        response = requests.post(url, json={'query': query}, headers=headers)
+        if not response.text or response.text.strip() == '':
+          print(f"Empty response at offset {offset}. Retrying...")
+          if retry_count >= max_retries:
+            print(f"Max retries reached. Saved {total_books} books.")
+            break
+          retry_count += 1
+          time.sleep(2 ** retry_count)
+          continue
+        data = response.json()
 
-      if 'error' in data and data['error'] == 'Throttled':
-        if retry_count >= max_retries:
-          print(f"Max retries reached at offset {offset}. Stopping.")
+        if 'error' in data and data['error'] == 'Throttled':
+          if retry_count >= max_retries:
+            print(f"Max retries reached at offset {offset}. Stopping.")
+            break
+        
+          wait_time = 2 ** retry_count
+          print(f"Throttled at offset {offset}. Waiting {wait_time} seconds...")
+          time.sleep(wait_time)
+          retry_count += 1
+          continue
+              
+        retry_count = 0
+        if 'errors' in data:
+          print(f"Error at offset {offset}:", data['errors'])
           break
-      
-        wait_time = 2 ** retry_count
-        print(f"Throttled at offset {offset}. Waiting {wait_time} seconds...")
-        time.sleep(wait_time)
-        retry_count += 1
-        continue
-            
-      retry_count = 0
-      if 'errors' in data:
-        print(f"Error at offset {offset}:", data['errors'])
-        break
 
-      if 'data' in data and 'books' in data['data']:
-        new_items = data['data']['books']
-        if not new_items:
-          has_more_data = False
+        if 'data' in data and 'books' in data['data']:
+          new_items = data['data']['books']
+          if not new_items:
+            has_more_data = False
+          else:
+            for book in new_items:
+              if len(book['user_books']) > 1:
+                f.write(json.dumps(book) + '\n')
+                total_books += len(new_items)
+                
+            print(f"Offset {offset}: Fetched {len(new_items)} books. Total: {total_books}")
+            offset += limit
+            time.sleep(1)
         else:
-          for book in new_items:
-            if not first_item:
-                f.write(',\n')
-            json.dump(book, f)
-            first_item = False
+          print(f"Unexpected response structure at offset {offset}: {data}")
+          break
 
-          total_books += len(new_items)
-          print(f"Offset {offset}: Fetched {len(new_items)} books. Total: {total_books}")
-          offset += limit
-          time.sleep(1)
-      else:
-        break
+      except requests.exceptions.JSONDecodeError as e:
+        print(f"JSON decode error at offset {offset}:")
+        print(f"Response status: {response.status_code}")
+        print(f"Response text (first 500 chars): {response.text[:500]}")
+        if retry_count >= max_retries:
+            print(f"Max retries reached. Saved {total_books} books.")
+            break
+        retry_count += 1
+        time.sleep(2 ** retry_count)
+        continue
 
   return all_data
 
-def get_books(refresh = False):
-  if os.path.exists(cache_file) and not refresh:
-    with open(cache_file, 'r') as f:
-      return json.load(f)
-
-  fetch_books_from_api()
+def get_all_books():
+  if not os.path.exists(cache_file):
+    fetch_books_from_api()
+  
+  books = []
   with open(cache_file, 'r') as f:
-    return json.load(f)
+    for line in f:
+      books.append(json.loads(line))
 
-full_data = get_books(refresh=True)
+  return books
+
+def get_one_book():
+  #loads books one at a time
+  if not os.path.exists(cache_file):
+    fetch_books_from_api()
+    
+  with open(cache_file, 'r') as f:
+    for line in f:
+      yield json.loads(line)
+
+
