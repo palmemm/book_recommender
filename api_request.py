@@ -74,10 +74,10 @@ def fetch_books_from_api():
             has_more_data = False
           else:
             for book in new_items:
-              if len(book['user_books']) > 1:
+              if len(book['user_books']) > 1 and book['rating']:
                 f.write(json.dumps(book) + '\n')
-                total_books += len(new_items)
-                
+                total_books += 1
+
             print(f"Offset {offset}: Fetched {len(new_items)} books. Total: {total_books}")
             offset += limit
             time.sleep(1)
