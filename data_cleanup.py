@@ -1,21 +1,22 @@
 import pandas as pd
+import json
 from api_request import get_one_book
 
 user_ratings = {}
-book_titles = {}
+book_title_cache = 'book_title_cache.json'
 
-for book in get_one_book():
-    avg_rating = book['rating']
-    book_id = book['id']
-    book_title = book['title']
-    book_titles[book_id] = book_title
-    user_ratings['Average'] = {book_id:avg_rating}
-    for user in book['user_books']:
-        user_id = user['user_id']
-        if user_id in user_ratings.keys():
-            user_ratings[user_id][book_id] = user['rating']
-        else:
-            user_ratings[user_id] = {book_id:user['rating']}
+with open(book_title_cache, 'w') as f:
+
+    for book in get_one_book():
+        book_id = book['id']
+        f.write(json.dumps({book_id:book['title']}) + '\n')
+        user_ratings['Average'] = {book_id:book['rating']}
+        for user in book['user_books']:
+            user_id = user['user_id']
+            if user_id in user_ratings.keys():
+                user_ratings[user_id][book_id] = user['rating']
+            else:
+                user_ratings[user_id] = {book_id:user['rating']}
 
 rating_df = pd.DataFrame(user_ratings)
 print(rating_df.info())
